@@ -1,15 +1,12 @@
 mod utils;
 
-extern crate base64;
-extern crate hex;
-extern crate crypto;
+use std::str::{self, from_utf8};
 
-use crypto::{symmetriccipher::{ SynchronousStreamCipher}};
+use chacha20poly1305::{
+    aead::{Aead, AeadCore, KeyInit, OsRng},
+    ChaCha20Poly1305
+};
 
-//use rustc_serialize::hex::FromHex;
-
-use core::str;
-use std::iter::repeat;
 
 use wasm_bindgen::prelude::*;
 
@@ -19,36 +16,21 @@ use wasm_bindgen::prelude::*;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-fn hex_to_bytes(s: &str) -> Vec<u8> {
-    s.from_hex().unwrap()
-}
-
 #[wasm_bindgen]
 extern {
     fn alert(s: &str);
 }
 
-const mykey: &str="0000000000000000000000000000000000000000000000000000000000000000";
-const myiv: &str="000000000000000000000000";
-
-const key: Vec<u8>=&hex_to_bytes( mykey)[..];
-const iv: Vec<u8>=&hex_to_bytes( myiv)[..];
+const key = ChaCha20Poly1305::generate_key(&mut OsRng);
+const cipher = ChaCha20Poly1305::new(&key);
+const nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng); // 96-bits;
 
 #[wasm_bindgen]
-pub fn encrypt(s: &str) -> str {
-    let plain = s.as_bytes();
-    // Encrypting
-    let mut c = crypto::chacha20::ChaCha20::new(&key, iv);
-    let mut output: Vec = repeat(0).take(plain.len()).collect();
-    c.process(&plain[..], &mut output[..]);
-    hex::encode(output.clone());
+pub fn encrypt(s: &str) {
+    cipher.encrypt(&nonce, s.as_bytes().as_ref()).unwrap();
 }
 
 #[wasm_bindgen]
-pub fn decrypt(encrypted: &str) -> str {
-    // Decrypting
-    let mut c = crypto::chacha20::ChaCha20::new(&key, iv);
-    let mut decrypted: Vec = repeat(0).take(encrypted.len()).collect();
-    c.process(&mut encrypted[..], &mut decrypted[..]);
-    str::from_utf8(&decrypted[..]).unwrap();
+pub fn decrypt(s: &str) {
+    from_utf8(&cipher.decrypt(&nonce, s.as_bytes().as_ref()).unwrap()).unwrap();
 }
